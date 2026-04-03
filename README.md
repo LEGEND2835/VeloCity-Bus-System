@@ -21,6 +21,13 @@ Creating a booking leverages the ReportLab framework to generate professional, m
 ### 🔄 Admin "U-Turn" Navigation Workflow
 Empowers Administrators with seamless vertical navigation. Admins can instantly transition from high-level management interfaces down into the exact Customer seating grid, process real-time bookings on behalf of passengers, and execute a swift "U-Turn" to snap instantly back to their centralized Admin View—without ever interrupting their session.
 
+## 🏗️ Project Architecture & Modular Breakdown
+
+- **`main.py`**: The centralized Application Controller. Manages the primary CTk window, initializes the SQLite engine, and handles all high-level frame routing.
+- **`ui_frames.py`**: The 'View' layer. Contains dedicated classes for the Login, Registration, Admin, and Customer interfaces using a stack-based layout.
+- **`database.py`**: The 'Model' layer. Manages the relational SQL schema, including table initialization, complex JOIN queries for revenue reporting, and data persistence.
+- **`utils.py`**: The 'Logic' layer. A utility toolkit housing the SHA-256 encryption algorithms, timestamp formatting, and the PDF generation triggers.
+
 ## 🎨 UI/UX Polishing Integrations
 
 ### 👁️ Dynamic Password Visibility Toggles
@@ -62,3 +69,7 @@ python main.py
 The SQLite3 engine naturally pre-seeds a root administrator profile on the first launch:
 - **Username**: `admin`
 - **Password**: `password123`
+
+## 📄 License
+
+This project and its unified architecture are licensed under the **Apache 2.0 License**.
