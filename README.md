@@ -36,6 +36,10 @@ We prioritize frictionless user experiences. State-tracked visibility toggles el
 ### 🧹 Registration Buffer Clearing
 Engineered to prevent overlapping authentication bugs, VeloCity actively monitors screen state transitions. Upon a successful registration or when navigating away, the underlying memory buffers aggressively clear out all sensitive `Entry` widget arrays, ensuring subsequent logins are always initiated cleanly without stale data persistence.
 
+## 🛤️ Roadmap: v1.1 Admin Manifest & Seat Revocation
+
+The next phase of VeloCity involves an Admin-Level Override System allowing for real-time ticket voiding and automated 'VOID' status synchronization between the SQLite database and the local PDF storage. This will leverage the existing RBAC (Role-Based Access Control) to ensure only authorized staff can trigger these reversals.
+
 ## 🚀 Setup Instructions
 
 ### 1. Environment Initialization
