@@ -330,7 +330,7 @@ class CustomerDashboard(ctk.CTkFrame):
             widget.destroy()
             
         query = """
-            SELECT bookings.id, buses.name, bookings.seat_num, buses.id, buses.total_seats
+            SELECT bookings.id, buses.name, bookings.seat_num, buses.id, buses.total_seats, bookings.status, bookings.admin_comment
             FROM bookings
             JOIN buses ON bookings.bus_id = buses.id
             WHERE bookings.user_id = ?
@@ -343,7 +343,7 @@ class CustomerDashboard(ctk.CTkFrame):
             lbl.pack(pady=10)
         else:
             for bkg in user_bookings:
-                booking_id, bus_name, seat_num, bus_id, total_seats = bkg
+                booking_id, bus_name, seat_num, bus_id, total_seats, status, admin_comment = bkg
                 
                 frame = ctk.CTkFrame(self.my_bookings_list)
                 frame.pack(fill="x", pady=5, padx=5)
@@ -351,13 +351,38 @@ class CustomerDashboard(ctk.CTkFrame):
                 lbl = ctk.CTkLabel(frame, text=f"{bus_name} - Seat {seat_num}")
                 lbl.pack(side="left", padx=10, pady=5)
                 
-                btn_cancel = ctk.CTkButton(frame, text="Cancel", fg_color="#FF4C4C", hover_color="#D32F2F", width=60,
-                                    command=lambda b_id=booking_id, bus=bus_id, total=total_seats, b_name=bus_name: self.cancel_my_booking(b_id, bus, total, b_name))
-                btn_cancel.pack(side="right", padx=10, pady=5)
+                if status == 'cancelled':
+                    err_lbl = ctk.CTkLabel(frame, text="", text_color="#FF4C4C", font=("Arial", 12, "bold"), width=250, anchor="e")
+                    err_lbl.pack(side="right", padx=10, pady=5)
+                    full_text = f"⚠️ Ticket Cancelled by Admin: {admin_comment}"
+                    self.start_marquee(err_lbl, full_text, display_width=30)
+                else:
+                    btn_cancel = ctk.CTkButton(frame, text="Cancel", fg_color="#FF4C4C", hover_color="#D32F2F", width=60,
+                                        command=lambda b_id=booking_id, bus=bus_id, total=total_seats, b_name=bus_name: self.cancel_my_booking(b_id, bus, total, b_name))
+                    btn_cancel.pack(side="right", padx=10, pady=5)
+                    
+                    btn_dl = ctk.CTkButton(frame, text="Download", fg_color="#4CAF50", hover_color="#388E3C", width=60,
+                                        command=lambda b_id=booking_id: self.download_ticket(b_id))
+                    btn_dl.pack(side="right", padx=(0, 5), pady=5)
+
+    def start_marquee(self, label, full_text, display_width=30, delay=80):
+        # Always pad for continuous effect
+        padded_text = full_text + "   •   "
+        
+        # Ensure string is long enough to slice the display width out of it
+        multiplier = (display_width // len(padded_text)) + 2
+        
+        def update_marquee(offset):
+            if not label.winfo_exists():
+                return
                 
-                btn_dl = ctk.CTkButton(frame, text="Download", fg_color="#4CAF50", hover_color="#388E3C", width=60,
-                                    command=lambda b_id=booking_id: self.download_ticket(b_id))
-                btn_dl.pack(side="right", padx=(0, 5), pady=5)
+            current_text = (padded_text * multiplier)[offset : offset + display_width]
+            label.configure(text=current_text)
+            
+            next_offset = (offset + 1) % len(padded_text)
+            label.after(delay, update_marquee, next_offset)
+            
+        update_marquee(0)
 
     def download_ticket(self, booking_id):
         import tkinter.filedialog as filedialog
@@ -429,7 +454,7 @@ class CustomerDashboard(ctk.CTkFrame):
         for widget in self.seat_frame.winfo_children():
             widget.destroy()
 
-        self.db.cursor.execute("SELECT seat_num FROM bookings WHERE bus_id=?", (bus_id,))
+        self.db.cursor.execute("SELECT seat_num FROM bookings WHERE bus_id=? AND status='active'", (bus_id,))
         booked_seats = [row[0] for row in self.db.cursor.fetchall()]
 
         cols = 5  # 5 seats per row (2+3 configuration)
@@ -631,7 +656,7 @@ class AdminDashboard(ctk.CTkFrame):
         self.revenue_frame = ctk.CTkFrame(self)
         self.revenue_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=10)
         
-        self.revenue_label = ctk.CTkLabel(self.revenue_frame, text="Total Revenue: $0", font=("Arial", 18, "bold"), text_color="#4CAF50")
+        self.revenue_label = ctk.CTkLabel(self.revenue_frame, text="Total Revenue: ₹0", font=("Arial", 18, "bold"), text_color="#4CAF50")
         self.revenue_label.pack(side="left", padx=20, pady=10)
         
         self.refresh_btn = ctk.CTkButton(self.revenue_frame, text="Refresh", fg_color="#0066ff", hover_color="#005ce6", command=self.load_data)
@@ -646,7 +671,7 @@ class AdminDashboard(ctk.CTkFrame):
     def load_data(self):
         # Load bookings using SQL JOIN
         query = """
-            SELECT bookings.id, users.username, buses.name, bookings.seat_num
+            SELECT bookings.id, users.username, buses.name, bookings.seat_num, bookings.status
             FROM bookings
             JOIN users ON bookings.user_id = users.id
             JOIN buses ON bookings.bus_id = buses.id
@@ -662,18 +687,24 @@ class AdminDashboard(ctk.CTkFrame):
             lbl.pack(pady=10)
         else:
             for bkg in all_bookings:
-                bkg_id, username, bus_name, seat = bkg
+                bkg_id, username, bus_name, seat, status = bkg
                 
                 frame = ctk.CTkFrame(self.bookings_frame, fg_color="transparent")
                 frame.pack(fill="x", pady=2)
                 
-                lbl_text = f"Booking ID: {bkg_id} | User: {username} | Bus: {bus_name} | Seat: {seat}"
+                status_text = "[CANCELLED] " if status == 'cancelled' else ""
+                lbl_text = f"Booking ID: {bkg_id} | User: {username} | Bus: {bus_name} | Seat: {seat} {status_text}"
                 lbl = ctk.CTkLabel(frame, text=lbl_text, font=("Arial", 14))
                 lbl.pack(side="left", padx=10)
                 
+                if status == 'active':
+                    cancel_btn = ctk.CTkButton(frame, text="Cancel Ticket", width=100, fg_color="#FF4C4C", hover_color="#D32F2F",
+                                        command=lambda b=bkg_id: self.admin_cancel_ticket(b))
+                    cancel_btn.pack(side="right", padx=5)
+
                 btn = ctk.CTkButton(frame, text="View Ticket File", width=120, fg_color="#1f538d",
                                     command=lambda b=bkg_id: self.open_ticket(b))
-                btn.pack(side="right", padx=10)
+                btn.pack(side="right", padx=5)
 
         # Load admins
         self.db.cursor.execute("SELECT username FROM users WHERE role='admin'")
@@ -687,10 +718,10 @@ class AdminDashboard(ctk.CTkFrame):
             lbl.pack(pady=5)
 
         # Load Revenue
-        self.db.cursor.execute("SELECT COUNT(*) FROM bookings")
+        self.db.cursor.execute("SELECT COUNT(*) FROM bookings WHERE status='active'")
         total_bookings = self.db.cursor.fetchone()[0]
         revenue = total_bookings * 500
-        self.revenue_label.configure(text=f"Total Revenue: ${revenue}")
+        self.revenue_label.configure(text=f"Total Revenue: ₹{revenue}")
 
         # Load Admin Vault
         self.db.cursor.execute("SELECT username, role, password FROM users")
@@ -727,6 +758,23 @@ class AdminDashboard(ctk.CTkFrame):
                 self.load_data()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to reset: {e}")
+
+    def admin_cancel_ticket(self, booking_id):
+        dialog = ctk.CTkInputDialog(text="Reason for Cancellation:", title="Cancel Ticket")
+        reason = dialog.get_input()
+        
+        if reason and reason.strip():
+            try:
+                self.db.cursor.execute("UPDATE bookings SET status='cancelled', admin_comment=? WHERE id=?", (reason.strip(), booking_id))
+                self.db.conn.commit()
+                
+                from utils import void_ticket
+                void_ticket(booking_id)
+                
+                messagebox.showinfo("Success", f"Ticket {booking_id} cancelled successfully.")
+                self.load_data()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to cancel ticket: {e}")
 
     def open_ticket(self, booking_id):
         import os
@@ -767,3 +815,4 @@ class AdminDashboard(ctk.CTkFrame):
                 self.load_data()  # Refresh lists
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to promote: {e}")
+                

@@ -49,6 +49,16 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass
             
+        try:
+            self.cursor.execute("ALTER TABLE bookings ADD COLUMN status TEXT DEFAULT 'active'")
+        except sqlite3.OperationalError:
+            pass
+            
+        try:
+            self.cursor.execute("ALTER TABLE bookings ADD COLUMN admin_comment TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+            
         self.conn.commit()
 
     def seed_data(self):
