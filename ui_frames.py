@@ -1,6 +1,5 @@
 import customtkinter as ctk
 import tkinter.messagebox as messagebox
-from PIL import Image
 from utils import hash_password
 
 class LoginFrame(ctk.CTkFrame):
@@ -19,15 +18,13 @@ class LoginFrame(ctk.CTkFrame):
         self.logo_top = ctk.CTkFrame(self.brand_frame, fg_color="transparent")
         self.logo_top.pack()
 
-        try:
-            self.logo_img = ctk.CTkImage(Image.open("logo.png"), size=(120, 120))
-            self.logo_label = ctk.CTkLabel(self.logo_top, image=self.logo_img, text="")
-            self.logo_label.pack(side="left", padx=(0, 10))
-        except Exception as e:
-            self.logo_label = ctk.CTkLabel(self.logo_top, text="[Logo Missing]", text_color="red")
-            self.logo_label.pack(side="left", padx=(0, 10))
+        self.circle_logo = ctk.CTkFrame(self.logo_top, width=60, height=60, corner_radius=30, fg_color="#001F54")
+        self.circle_logo.pack(side="left", padx=(0, 10))
+        self.circle_logo.pack_propagate(False)
+        self.v_label = ctk.CTkLabel(self.circle_logo, text="V", font=("Arial", 40, "bold"), text_color="white")
+        self.v_label.place(relx=0.5, rely=0.5, anchor="center")
 
-        self.brand_name = ctk.CTkLabel(self.logo_top, text="VeloCity", font=("Arial", 40, "bold"), text_color="#00d4ff")
+        self.brand_name = ctk.CTkLabel(self.logo_top, text="VeloCity Transit", font=("Arial", 40, "bold"), text_color="#00d4ff")
         self.brand_name.pack(side="left")
 
         self.tagline = ctk.CTkLabel(self.brand_frame, text="Redefining Urban Transit", font=("Arial", 16, "italic"), text_color="gray")
@@ -268,7 +265,7 @@ class CustomerDashboard(ctk.CTkFrame):
         self.v_label = ctk.CTkLabel(self.circle_logo, text="V", font=("Arial", 28, "bold"), text_color="white")
         self.v_label.place(relx=0.5, rely=0.5, anchor="center")
 
-        self.brand_name = ctk.CTkLabel(self.logo_top, text="VeloCity", font=("Arial", 24, "bold"), text_color="#00d4ff")
+        self.brand_name = ctk.CTkLabel(self.logo_top, text="VeloCity Transit", font=("Arial", 24, "bold"), text_color="#00d4ff")
         self.brand_name.pack(side="left")
 
         self.header = ctk.CTkLabel(self.logo_top, text="| Customer", font=("Arial", 20), text_color="gray")
@@ -618,7 +615,7 @@ class AdminDashboard(ctk.CTkFrame):
         self.v_label = ctk.CTkLabel(self.circle_logo, text="V", font=("Arial", 28, "bold"), text_color="white")
         self.v_label.place(relx=0.5, rely=0.5, anchor="center")
 
-        self.brand_name = ctk.CTkLabel(self.logo_top, text="VeloCity", font=("Arial", 24, "bold"), text_color="#00d4ff")
+        self.brand_name = ctk.CTkLabel(self.logo_top, text="VeloCity Transit", font=("Arial", 24, "bold"), text_color="#00d4ff")
         self.brand_name.pack(side="left")
 
         self.header = ctk.CTkLabel(self.logo_top, text="| Admin", font=("Arial", 20), text_color="gray")
