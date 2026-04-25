@@ -16,7 +16,7 @@ def hash_password(password):
     """Encodes the password into a secure hash so it's not stored as plain text."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def generate_ticket(username, bus_name, seat_num, booking_id, passenger_name="", age=0, gender="", contact=""):
+def generate_ticket(username, bus_name, seat_num, booking_id, passenger_name="", age=0, gender="", contact="", fare=500):
     """Generates a professional text-based ticket, PDF, and JPG, and saves it to a folder."""
     if not os.path.exists("tickets"):
         os.makedirs("tickets")
@@ -73,7 +73,7 @@ def generate_ticket(username, bus_name, seat_num, booking_id, passenger_name="",
     c.drawString(50, 530, f"Demographics: Age {age} | {gender}")
     c.drawString(50, 510, f"Bus/Route: {bus_name}")
     c.drawString(50, 490, f"Seat Number: {seat_num}")
-    c.drawString(50, 470, f"Total Fare: INR 500")
+    c.drawString(50, 470, f"Total Fare: INR {int(fare)}")
     
     c.drawString(50, 450, f"Primary Contact: {contact}")
     c.drawString(50, 430, f"Date/Time: {date_str}")

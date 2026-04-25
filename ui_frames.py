@@ -294,7 +294,7 @@ class CustomerDashboard(ctk.CTkFrame):
         self.cart_frame = ctk.CTkFrame(self.seat_frame_container, fg_color="transparent")
         self.cart_frame.pack(fill="x", padx=20)
         
-        self.price_label = ctk.CTkLabel(self.cart_frame, text="Ticket Price: ₹500", font=("Arial", 14))
+        self.price_label = ctk.CTkLabel(self.cart_frame, text="Ticket Price: —", font=("Arial", 14))
         self.price_label.pack(side="left")
         
         self.total_label = ctk.CTkLabel(self.cart_frame, text="Total Amount: ₹0", font=("Arial", 16, "bold"), text_color="#4CAF50")
@@ -303,7 +303,24 @@ class CustomerDashboard(ctk.CTkFrame):
         self.checkout_btn = ctk.CTkButton(self.cart_frame, text="Proceed to Details", fg_color="#0066ff", hover_color="#005ce6", command=self.open_checkout)
         self.checkout_btn.pack(side="right")
         self.checkout_btn.configure(state="disabled")
-        
+
+        # ── Seat Color Legend ──
+        self.legend_frame = ctk.CTkFrame(self.seat_frame_container, fg_color="transparent")
+        self.legend_frame.pack(fill="x", padx=20, pady=(8, 2))
+
+        legend_items = [
+            ("#4CAF50", "Available"),
+            ("#FBC02D", "Selected"),
+            ("#FF4C4C", "Booked"),
+        ]
+        for color, label_text in legend_items:
+            item = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
+            item.pack(side="left", padx=(0, 18))
+            swatch = ctk.CTkFrame(item, width=14, height=14, corner_radius=3, fg_color=color)
+            swatch.pack(side="left", padx=(0, 5))
+            swatch.pack_propagate(False)
+            ctk.CTkLabel(item, text=label_text, font=("Arial", 12), text_color="#ccc").pack(side="left")
+
         self.seat_frame = ctk.CTkFrame(self.seat_frame_container, fg_color="transparent")
         self.seat_frame.pack(expand=True, fill="both", padx=20, pady=10)
         
@@ -429,22 +446,41 @@ class CustomerDashboard(ctk.CTkFrame):
                 messagebox.showerror("Error", f"Cancel failed: {e}")
 
     def load_buses(self):
-        self.db.cursor.execute("SELECT id, name, route, total_seats, time FROM buses limit 3")
+        self.db.cursor.execute(
+            """SELECT id, name, route, total_seats, time,
+                      bus_number, source, destination, departure_time, date, fare
+               FROM buses ORDER BY id"""
+        )
         buses = self.db.cursor.fetchall()
 
         for widget in self.bus_list_frame.winfo_children():
             widget.destroy()
 
-        for bus in buses:
-            bus_id, name, route, total_seats, time = bus
-            btn_text = f"{name}\n{route} - {time}"
-            btn = ctk.CTkButton(self.bus_list_frame, text=btn_text, 
-                                command=lambda b_id=bus_id, s=total_seats, n=name: self.show_seats(b_id, s, n))
-            btn.pack(pady=10, fill="x", padx=10)
+        if not buses:
+            lbl = ctk.CTkLabel(self.bus_list_frame, text="No buses available.", text_color="gray")
+            lbl.pack(pady=20)
+            return
 
-    def show_seats(self, bus_id, total_seats, bus_name):
-        self.current_bus_context = {"id": bus_id, "name": bus_name, "total": total_seats}
+        for bus in buses:
+            bus_id, name, route, total_seats, time_val, bus_number, source, destination, dep_time, date, fare = bus
+
+            # Prefer new columns, fall back to legacy
+            display_name = bus_number if bus_number else name
+            display_route = f"{source} → {destination}" if source and destination else route
+            display_time = dep_time if dep_time else time_val
+            display_date = f"  📅 {date}" if date else ""
+            display_fare = f"  💰 ₹{int(fare)}" if fare else ""
+
+            btn_text = f"{display_name}\n{display_route} • {display_time}{display_date}{display_fare}"
+            bus_fare = fare if fare else 500
+            btn = ctk.CTkButton(self.bus_list_frame, text=btn_text, height=50,
+                                command=lambda b_id=bus_id, s=total_seats, n=display_name, f=bus_fare: self.show_seats(b_id, s, n, f))
+            btn.pack(pady=6, fill="x", padx=10)
+
+    def show_seats(self, bus_id, total_seats, bus_name, fare=500):
+        self.current_bus_context = {"id": bus_id, "name": bus_name, "total": total_seats, "fare": fare}
         self.selected_seats = []
+        self.price_label.configure(text=f"Ticket Price: ₹{int(fare)}")
         self.update_cart_ui()
         self.seat_info_label.configure(text=f"Seats for {bus_name}")
         
@@ -493,8 +529,9 @@ class CustomerDashboard(ctk.CTkFrame):
                     widget.configure(fg_color="#4CAF50", hover_color="#388E3C")
 
     def update_cart_ui(self):
-        total = len(self.selected_seats) * 500
-        self.total_label.configure(text=f"Total Amount: ₹{total}")
+        fare = self.current_bus_context.get("fare", 500)
+        total = len(self.selected_seats) * fare
+        self.total_label.configure(text=f"Total Amount: ₹{int(total)}")
         if len(self.selected_seats) > 0:
             self.checkout_btn.configure(state="normal")
         else:
@@ -573,7 +610,8 @@ class CustomerDashboard(ctk.CTkFrame):
                     self.db.cursor.execute("INSERT INTO bookings (user_id, bus_id, seat_num, passenger_name, passenger_age, passenger_gender, contact_number) VALUES (?, ?, ?, ?, ?, ?, ?)",
                                         (self.controller.current_user_id, self.current_bus_context['id'], seat, p_name, p_age, p_gender, phone))
                     booking_id = self.db.cursor.lastrowid
-                    generate_ticket(username, self.current_bus_context['name'], seat, booking_id, p_name, p_age, p_gender, phone)
+                    bus_fare = self.current_bus_context.get('fare', 500)
+                    generate_ticket(username, self.current_bus_context['name'], seat, booking_id, p_name, p_age, p_gender, phone, bus_fare)
                 
                 self.db.conn.commit()
                 self.selected_seats.clear()
@@ -598,12 +636,12 @@ class AdminDashboard(ctk.CTkFrame):
         self.controller = controller
         self.db = db
 
-        self.grid_columnconfigure(0, weight=3)
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
+        # ── Header (shared across tabs) ──────────────────────
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.header_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=10)
+        self.header_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
         self.header_frame.grid_columnconfigure(0, weight=1)
 
         self.logo_top = ctk.CTkFrame(self.header_frame, fg_color="transparent")
@@ -632,11 +670,33 @@ class AdminDashboard(ctk.CTkFrame):
                                         command=lambda: controller.show_frame("LoginFrame"))
         self.logout_btn.pack(side="left")
 
-        self.bookings_frame = ctk.CTkScrollableFrame(self, label_text="All Bookings")
-        self.bookings_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
+        # ── Tabview ──────────────────────────────────────────
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 10))
 
-        self.admins_frame = ctk.CTkFrame(self)
-        self.admins_frame.grid(row=1, column=1, sticky="nsew", padx=20, pady=10)
+        self.tab_dashboard = self.tabview.add("Dashboard")
+        self.tab_fleet = self.tabview.add("Manage Fleet")
+
+        self._build_dashboard_tab()
+        self._build_fleet_tab()
+
+        self.load_data()
+
+    # ══════════════════════════════════════════════════════════
+    #  TAB 1 — Dashboard (existing functionality)
+    # ══════════════════════════════════════════════════════════
+    def _build_dashboard_tab(self):
+        tab = self.tab_dashboard
+        tab.grid_columnconfigure(0, weight=3)
+        tab.grid_columnconfigure(1, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+        tab.grid_rowconfigure(2, weight=2)
+
+        self.bookings_frame = ctk.CTkScrollableFrame(tab, label_text="All Bookings")
+        self.bookings_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=5)
+
+        self.admins_frame = ctk.CTkFrame(tab)
+        self.admins_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=5)
         
         self.admins_label = ctk.CTkLabel(self.admins_frame, text="Registered Admins", font=("Arial", 16, "bold"))
         self.admins_label.pack(pady=10)
@@ -650,8 +710,8 @@ class AdminDashboard(ctk.CTkFrame):
         self.promote_btn = ctk.CTkButton(self.admins_frame, text="Promote to Admin", fg_color="#0066ff", hover_color="#005ce6", command=self.promote_admin)
         self.promote_btn.pack(pady=(5,10), padx=10, fill="x")
 
-        self.revenue_frame = ctk.CTkFrame(self)
-        self.revenue_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=10)
+        self.revenue_frame = ctk.CTkFrame(tab)
+        self.revenue_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
         
         self.revenue_label = ctk.CTkLabel(self.revenue_frame, text="Total Revenue: ₹0", font=("Arial", 18, "bold"), text_color="#4CAF50")
         self.revenue_label.pack(side="left", padx=20, pady=10)
@@ -659,12 +719,181 @@ class AdminDashboard(ctk.CTkFrame):
         self.refresh_btn = ctk.CTkButton(self.revenue_frame, text="Refresh", fg_color="#0066ff", hover_color="#005ce6", command=self.load_data)
         self.refresh_btn.pack(side="right", padx=20, pady=10)
 
-        self.vault_frame = ctk.CTkScrollableFrame(self, label_text="The Admin Vault (User Management)")
-        self.vault_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=20, pady=10)
-        self.grid_rowconfigure(3, weight=2)
+        self.vault_frame = ctk.CTkScrollableFrame(tab, label_text="The Admin Vault (User Management)")
+        self.vault_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=5)
 
-        self.load_data()
+    # ══════════════════════════════════════════════════════════
+    #  TAB 2 — Manage Fleet
+    # ══════════════════════════════════════════════════════════
+    def _build_fleet_tab(self):
+        tab = self.tab_fleet
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_columnconfigure(1, weight=2)
+        tab.grid_rowconfigure(0, weight=1)
 
+        # ── Left: Add Bus Form ──
+        form_frame = ctk.CTkFrame(tab)
+        form_frame.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=5)
+
+        title = ctk.CTkLabel(form_frame, text="🚌  Add New Bus", font=("Arial", 20, "bold"), text_color="#00d4ff")
+        title.pack(pady=(15, 10))
+
+        sep = ctk.CTkFrame(form_frame, height=2, fg_color="#00d4ff")
+        sep.pack(fill="x", padx=20, pady=(0, 15))
+
+        # Bus Number
+        ctk.CTkLabel(form_frame, text="Bus Number", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        self.fleet_bus_number = ctk.CTkEntry(form_frame, placeholder_text="e.g. WB-74-1234", width=260)
+        self.fleet_bus_number.pack(padx=20, pady=(2, 8))
+
+        # Source
+        ctk.CTkLabel(form_frame, text="Source", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        self.fleet_source = ctk.CTkEntry(form_frame, placeholder_text="e.g. Siliguri", width=260)
+        self.fleet_source.pack(padx=20, pady=(2, 8))
+
+        # Destination
+        ctk.CTkLabel(form_frame, text="Destination", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        self.fleet_destination = ctk.CTkEntry(form_frame, placeholder_text="e.g. Kolkata", width=260)
+        self.fleet_destination.pack(padx=20, pady=(2, 8))
+
+        # Date
+        ctk.CTkLabel(form_frame, text="Date", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        self.fleet_date = ctk.CTkEntry(form_frame, placeholder_text="YYYY-MM-DD", width=260)
+        self.fleet_date.pack(padx=20, pady=(2, 8))
+
+        # Departure Time
+        ctk.CTkLabel(form_frame, text="Departure Time", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        time_options = [
+            "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
+            "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM",
+            "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM", "11:00 PM"
+        ]
+        self.fleet_time_var = ctk.StringVar(value="10:00 AM")
+        self.fleet_time = ctk.CTkOptionMenu(form_frame, values=time_options, variable=self.fleet_time_var, width=260)
+        self.fleet_time.pack(padx=20, pady=(2, 8))
+
+        # Total Seats
+        ctk.CTkLabel(form_frame, text="Total Seats", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        self.fleet_seats = ctk.CTkEntry(form_frame, placeholder_text="40", width=260)
+        self.fleet_seats.insert(0, "40")
+        self.fleet_seats.pack(padx=20, pady=(2, 8))
+
+        # Fare
+        ctk.CTkLabel(form_frame, text="Fare (₹)", font=("Arial", 13, "bold")).pack(anchor="w", padx=20)
+        self.fleet_fare = ctk.CTkEntry(form_frame, placeholder_text="500", width=260)
+        self.fleet_fare.insert(0, "500")
+        self.fleet_fare.pack(padx=20, pady=(2, 8))
+
+        # Add Bus Button
+        self.add_bus_btn = ctk.CTkButton(form_frame, text="➕  Add Bus to Fleet", width=260, height=40,
+                                          fg_color="#0066ff", hover_color="#005ce6",
+                                          font=("Arial", 14, "bold"), command=self.handle_add_bus)
+        self.add_bus_btn.pack(padx=20, pady=(15, 10))
+
+        self.fleet_status_label = ctk.CTkLabel(form_frame, text="", font=("Arial", 12), text_color="#FBC02D")
+        self.fleet_status_label.pack(pady=(0, 10))
+
+        # ── Right: Fleet List ──
+        self.fleet_list_frame = ctk.CTkScrollableFrame(tab, label_text="🚍  Current Fleet")
+        self.fleet_list_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 10), pady=5)
+
+    def handle_add_bus(self):
+        bus_number = self.fleet_bus_number.get().strip()
+        source = self.fleet_source.get().strip()
+        destination = self.fleet_destination.get().strip()
+        date = self.fleet_date.get().strip()
+        departure_time = self.fleet_time_var.get()
+        seats_str = self.fleet_seats.get().strip()
+        fare_str = self.fleet_fare.get().strip()
+
+        # Validate required fields
+        if not bus_number or not source or not destination or not date:
+            messagebox.showwarning("Warning", "Bus Number, Source, Destination, and Date are required.")
+            return
+
+        # Validate numeric fields
+        try:
+            total_seats = int(seats_str)
+            if total_seats <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning("Warning", "Total Seats must be a positive integer.")
+            return
+
+        try:
+            fare = float(fare_str)
+            if fare < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning("Warning", "Fare must be a valid non-negative number.")
+            return
+
+        # Validate date format
+        import re
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+            messagebox.showwarning("Warning", "Date must be in YYYY-MM-DD format.")
+            return
+
+        # Call database method
+        success, result = self.db.add_bus(bus_number, source, destination, departure_time, date, total_seats, fare)
+
+        if success:
+            messagebox.showinfo("Success", f"Bus '{bus_number}' added successfully!\n"
+                                           f"Route: {source} → {destination}\n"
+                                           f"Bus ID: {result} | Seats: {total_seats} created.")
+            self.fleet_status_label.configure(text=f"✅ Bus {bus_number} added (ID: {result})", text_color="#4CAF50")
+            # Clear form
+            self.fleet_bus_number.delete(0, 'end')
+            self.fleet_source.delete(0, 'end')
+            self.fleet_destination.delete(0, 'end')
+            self.fleet_date.delete(0, 'end')
+            self.fleet_seats.delete(0, 'end')
+            self.fleet_seats.insert(0, "40")
+            self.fleet_fare.delete(0, 'end')
+            self.fleet_fare.insert(0, "500")
+            self.fleet_time_var.set("10:00 AM")
+            # Refresh fleet list
+            self.load_fleet_list()
+        else:
+            messagebox.showerror("Duplicate Bus", result)
+            self.fleet_status_label.configure(text=f"⚠️ {result}", text_color="#FF4C4C")
+
+    def load_fleet_list(self):
+        for widget in self.fleet_list_frame.winfo_children():
+            widget.destroy()
+
+        buses = self.db.get_all_buses()
+
+        if not buses:
+            lbl = ctk.CTkLabel(self.fleet_list_frame, text="No buses in fleet yet.", font=("Arial", 14), text_color="gray")
+            lbl.pack(pady=20)
+            return
+
+        for bus in buses:
+            bus_id, bus_number, name, source, destination, dep_time, date, total_seats, fare, route, time_val = bus
+
+            card = ctk.CTkFrame(self.fleet_list_frame, corner_radius=8)
+            card.pack(fill="x", padx=5, pady=4)
+
+            # Display bus_number if available, otherwise fall back to name
+            display_name = bus_number if bus_number else name
+            display_route = f"{source} → {destination}" if source and destination else route
+            display_time = dep_time if dep_time else time_val
+            display_fare = f"₹{int(fare)}" if fare else "—"
+            display_date = date if date else "—"
+
+            top_row = ctk.CTkFrame(card, fg_color="transparent")
+            top_row.pack(fill="x", padx=10, pady=(6, 2))
+
+            ctk.CTkLabel(top_row, text=f"🚌 {display_name}", font=("Arial", 14, "bold"), text_color="#00d4ff").pack(side="left")
+            ctk.CTkLabel(top_row, text=f"ID: {bus_id}", font=("Arial", 11), text_color="gray").pack(side="right")
+
+            detail_text = f"{display_route}  •  {display_time}  •  {display_date}  •  {total_seats} seats  •  {display_fare}"
+            ctk.CTkLabel(card, text=detail_text, font=("Arial", 12), text_color="#ccc").pack(anchor="w", padx=10, pady=(0, 6))
+
+    # ══════════════════════════════════════════════════════════
+    #  Data loading & existing methods
+    # ══════════════════════════════════════════════════════════
     def load_data(self):
         # Load bookings using SQL JOIN
         query = """
@@ -714,11 +943,19 @@ class AdminDashboard(ctk.CTkFrame):
             lbl = ctk.CTkLabel(self.admins_list, text=adm[0], font=("Arial", 14))
             lbl.pack(pady=5)
 
-        # Load Revenue
-        self.db.cursor.execute("SELECT COUNT(*) FROM bookings WHERE status='active'")
-        total_bookings = self.db.cursor.fetchone()[0]
-        revenue = total_bookings * 500
-        self.revenue_label.configure(text=f"Total Revenue: ₹{revenue}")
+        # Load Revenue (fare-aware)
+        self.db.cursor.execute(
+            """SELECT COALESCE(SUM(buses.fare), 0)
+               FROM bookings
+               JOIN buses ON bookings.bus_id = buses.id
+               WHERE bookings.status='active'"""
+        )
+        revenue = self.db.cursor.fetchone()[0]
+        # Fall back: count bookings × 500 for legacy buses with fare=0
+        if revenue == 0:
+            self.db.cursor.execute("SELECT COUNT(*) FROM bookings WHERE status='active'")
+            revenue = self.db.cursor.fetchone()[0] * 500
+        self.revenue_label.configure(text=f"Total Revenue: ₹{int(revenue)}")
 
         # Load Admin Vault
         self.db.cursor.execute("SELECT username, role, password FROM users")
@@ -740,6 +977,9 @@ class AdminDashboard(ctk.CTkFrame):
             btn = ctk.CTkButton(frame, text="Reset Password", width=120, fg_color="#FF9800", hover_color="#F57C00",
                                 command=lambda u=u_name: self.force_reset_password(u))
             btn.pack(side="right", padx=10)
+
+        # Load Fleet list
+        self.load_fleet_list()
 
     def force_reset_password(self, target_username):
         dialog = ctk.CTkInputDialog(text=f"Enter new password for '{target_username}':", title="Force Password Reset")
@@ -812,4 +1052,5 @@ class AdminDashboard(ctk.CTkFrame):
                 self.load_data()  # Refresh lists
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to promote: {e}")
+
                 
